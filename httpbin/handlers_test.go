@@ -2371,3 +2371,54 @@ func TestNotImplemented(t *testing.T) {
 		})
 	}
 }
+
+func TestRetry(t *testing.T) {
+	codes := []int{
+		http.StatusOK,
+		http.StatusTeapot,
+	}
+	u := "/fail-request/1/418"
+
+	var tests = []string{
+		"/fail-request/1/700",
+		"/fail-request/1/99",
+		"/fail-request/-1/200",
+		"/fail-request/1/qwerty",
+		"/fail-request/1/3.6",
+	}
+	for _, test := range tests {
+		t.Run(test, func(t *testing.T) {
+			r, _ := http.NewRequest("GET", test, nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			assertStatusCode(t, w, http.StatusBadRequest)
+		})
+	}
+
+	t.Run("valid", func(t *testing.T) {
+		for _, code := range codes {
+			r, _ := http.NewRequest("GET", u, nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			assertStatusCode(t, w, code)
+		}
+	})
+
+	t.Run("more valid requests", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			r, _ := http.NewRequest("GET", "/fail-request/100/503", nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+
+			assertStatusCode(t, w, http.StatusOK)
+		}
+
+		for _, code := range codes {
+			r, _ := http.NewRequest("GET", u, nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			assertStatusCode(t, w, code)
+		}
+	})
+
+}

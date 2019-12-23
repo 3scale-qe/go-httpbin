@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mccutchen/go-httpbin/httpbin/assets"
@@ -947,4 +948,45 @@ func (h *HTTPBin) Bearer(w http.ResponseWriter, r *http.Request) {
 		Token:         tokenFields[1],
 	})
 	writeJSON(w, body, http.StatusOK)
+}
+
+// Retry - counts request and after it is over desired count it will return desired response code
+var actualCount int
+var maxCount int
+
+func (h *HTTPBin) Retry(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(r.URL.Path, "/")
+	count := len(parts)
+
+	if count != 4 {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+
+	desiredCount, err := strconv.Atoi(parts[2])
+	if err != nil || desiredCount < 0 {
+		http.Error(w, "Invalid desired count", http.StatusBadRequest)
+		return
+	}
+
+	responseCode, err := strconv.Atoi(parts[3])
+	if err != nil || responseCode < 100 || responseCode > 699 {
+		http.Error(w, "Invalid response code", http.StatusBadRequest)
+		return
+	}
+
+	var mutex = &sync.Mutex{}
+
+	mutex.Lock()
+	if maxCount != desiredCount {
+		maxCount = desiredCount
+		actualCount = 0
+	}
+	actualCount += 1
+	if actualCount <= maxCount {
+		responseCode = 200
+	}
+	mutex.Unlock()
+
+	w.WriteHeader(responseCode)
 }
